@@ -23,19 +23,19 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 	tests := []struct {
 		name                          string
 		subscriptionNumbers           []string
-		getServiceLevelCapacityUsage  func(ctx context.Context, subscriptionNumber string, serviceLevel []service_codegen_dlh.ServiceLevelNameWithAll, fromDate time.Time, toDate time.Time, step string) (service_codegen_dlh.SubscriptionCapacityUsage, error)
+		getServiceLevelCapacityUsage  func(ctx context.Context, subscriptionNumber string, serviceLevel string, fromDate time.Time, toDate time.Time, step string) ([]service_codegen_dlh.HistoricalUsage, error)
 		expected                      []service_codegen.ServiceLevelHistoricalConsumptions
 		err                           error
 	}{
 		{
 			name:                "TestGetServiceLevelCapacityUsagesSuccess",
 			subscriptionNumbers: []string{"sub-123"},
-			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumber string, serviceLevel []service_codegen_dlh.ServiceLevelNameWithAll, fromDate time.Time, toDate time.Time, step string) (service_codegen_dlh.SubscriptionCapacityUsage, error) {
-				return service_codegen_dlh.SubscriptionCapacityUsage{
-					ServiceLevelCapacityUsage: []service_codegen_dlh.ServiceLevelCapacityUsage{
-						{
-							ServiceLevel: "premium",
-						},
+			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumber string, serviceLevel string, fromDate time.Time, toDate time.Time, step string) ([]service_codegen_dlh.HistoricalUsage, error) {
+				return []service_codegen_dlh.HistoricalUsage{
+					{
+						Timestamp:     time.Now().Format(time.RFC3339),
+						ServiceLevel:  service_codegen_dlh.ServiceLevelName(serviceLevel), // ✅ Correct field name
+						ConsumedBytes: 1024,
 					},
 				}, nil
 			},
@@ -43,7 +43,10 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 				{
 					Subscription: service_codegen.SubscriptionBase{Number: "sub-123"},
 					ServiceLevels: []service_codegen.ServiceLevelHistoricalConsumption{
-						{Name: "premium"},
+						{
+							Name:          "premium",
+							ConsumedBytes: 1024,
+						},
 					},
 				},
 			},
@@ -52,8 +55,8 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 		{
 			name:                "TestGetServiceLevelCapacityUsagesNotFound",
 			subscriptionNumbers: []string{"sub-456"},
-			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumber string, serviceLevel []service_codegen_dlh.ServiceLevelNameWithAll, fromDate time.Time, toDate time.Time, step string) (service_codegen_dlh.SubscriptionCapacityUsage, error) {
-				return service_codegen_dlh.SubscriptionCapacityUsage{}, client.ErrorSubscriptionNotFound
+			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumber string, serviceLevel string, fromDate time.Time, toDate time.Time, step string) ([]service_codegen_dlh.HistoricalUsage, error) {
+				return nil, client.ErrorSubscriptionNotFound
 			},
 			expected: nil,
 			err:      client.ErrorSubscriptionNotFound,
@@ -61,8 +64,8 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 		{
 			name:                "TestGetServiceLevelCapacityUsagesError",
 			subscriptionNumbers: []string{"sub-789"},
-			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumber string, serviceLevel []service_codegen_dlh.ServiceLevelNameWithAll, fromDate time.Time, toDate time.Time, step string) (service_codegen_dlh.SubscriptionCapacityUsage, error) {
-				return service_codegen_dlh.SubscriptionCapacityUsage{}, errors.New("unexpected error")
+			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumber string, serviceLevel string, fromDate time.Time, toDate time.Time, step string) ([]service_codegen_dlh.HistoricalUsage, error) {
+				return nil, errors.New("unexpected error")
 			},
 			expected: nil,
 			err:      errors.New("unexpected error"),
@@ -73,20 +76,7 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mockFooterClient := mocks.FooterClientMock{
 				GetCapacityUsageFunc: func(ctx context.Context, subscriptionNumber string, serviceLevel string, fromDate time.Time, toDate time.Time, step string) ([]service_codegen_dlh.HistoricalUsage, error) {
-					// Simulating the behavior of GetServiceLevelCapacityUsagesBySubscription based on test case
-					capacityUsage, err := test.getServiceLevelCapacityUsage(ctx, subscriptionNumber, []service_codegen_dlh.ServiceLevelNameWithAll{service_codegen_dlh.ServiceLevelNameWithAllAll}, fromDate, toDate, step)
-					if err != nil {
-						return nil, err
-					}
-					// Convert to the expected return type (HistoricalUsage slice)
-					var historicalUsages []service_codegen_dlh.HistoricalUsage
-					for _, slUsage := range capacityUsage.ServiceLevelCapacityUsage {
-						historicalUsages = append(historicalUsages, service_codegen_dlh.HistoricalUsage{
-							Timestamp: time.Now().Format(time.RFC3339),
-							ServiceLevel: service_codegen_dlh.ServiceLevelName(slUsage.ServiceLevel),
-						})
-					}
-					return historicalUsages, nil
+					return test.getServiceLevelCapacityUsage(ctx, subscriptionNumber, serviceLevel, fromDate, toDate, step)
 				},
 			}
 
