@@ -1,0 +1,138 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/oapi-codegen/runtime/types"
+	service_codegen "keystone-go/pkg/reporting-public/codegen/service_codegen"
+	service_codegen_dlh "keystone-go/pkg/reporting-dlh/codegen/service_codegen"
+	mock_service "keystone-go/pkg/reporting-public/pkg/api/service/mocks"
+	"keystone-go/pkg/reporting-dlh/pkg/client"
+)
+
+// Test ListBySubscriptionNumber
+func TestListBySubscriptionNumber(t *testing.T) {
+	mockService := &mock_service.SubscriptionServicesMock{
+		ListBySubscriptionNumberFunc: func(ctx context.Context, subscriptionNumbers []string) ([]service_codegen.Subscriptions, error) {
+			if subscriptionNumbers[0] == "invalid-sub" {
+				return nil, client.ErrorSubscriptionNotFound
+			}
+			return []service_codegen.Subscriptions{
+				{
+					Subscription: service_codegen.SubscriptionBase{
+						Number:      "sub-001",
+						AccountName: "Test Account",
+						StartDate:   time.Now(),
+						EndDate:     time.Now().AddDate(1, 0, 0),
+					},
+				},
+			}, nil
+		},
+	}
+
+	service := subscriptionServices{
+		subscriptionFacadeService: subscriptionServiceFacade{
+			privateSubscriptionService: mockService,
+		},
+	}
+
+	t.Run("ValidSubscription", func(t *testing.T) {
+		subscriptions, err := service.ListBySubscriptionNumber(context.Background(), []string{"sub-001"})
+		assert.NoError(t, err)
+		assert.Len(t, subscriptions, 1)
+		assert.Equal(t, "sub-001", subscriptions[0].Subscription.Number)
+	})
+
+	t.Run("InvalidSubscription", func(t *testing.T) {
+		subscriptions, err := service.ListBySubscriptionNumber(context.Background(), []string{"invalid-sub"})
+		assert.Error(t, err)
+		assert.Nil(t, subscriptions)
+	})
+}
+
+// Test ListSubscriptionServiceLevels
+func TestListSubscriptionServiceLevels(t *testing.T) {
+	mockService := &mock_service.SubscriptionServicesMock{
+		ListSubscriptionServiceLevelsFunc: func(ctx context.Context, subscriptionNumbers []string) ([]service_codegen.SubscriptionServiceLevels, error) {
+			if subscriptionNumbers[0] == "invalid-sub" {
+				return nil, client.ErrorSubscriptionNotFound
+			}
+			return []service_codegen.SubscriptionServiceLevels{
+				{
+					Subscription: service_codegen.SubscriptionBase{
+						Number: "sub-001",
+					},
+					ServiceLevels: []service_codegen.ServiceLevel{
+						{Name: "premium", CommittedTib: 10.0},
+					},
+				},
+			}, nil
+		},
+	}
+
+	service := subscriptionServices{
+		subscriptionFacadeService: subscriptionServiceFacade{
+			privateSubscriptionService: mockService,
+		},
+	}
+
+	t.Run("ValidSubscriptionServiceLevels", func(t *testing.T) {
+		serviceLevels, err := service.ListSubscriptionServiceLevels(context.Background(), []string{"sub-001"})
+		assert.NoError(t, err)
+		assert.Len(t, serviceLevels, 1)
+		assert.Equal(t, "premium", serviceLevels[0].ServiceLevels[0].Name)
+	})
+
+	t.Run("InvalidSubscriptionServiceLevels", func(t *testing.T) {
+		serviceLevels, err := service.ListSubscriptionServiceLevels(context.Background(), []string{"invalid-sub"})
+		assert.Error(t, err)
+		assert.Nil(t, serviceLevels)
+	})
+}
+
+// Test GetServiceLevelCapacityUsagesBySubscription
+func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
+	mockService := &mock_service.SubscriptionServicesMock{
+		GetServiceLevelCapacityUsagesBySubscriptionFunc: func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error) {
+			if subscriptionNumbers[0] == "invalid-sub" {
+				return nil, client.ErrorSubscriptionNotFound
+			}
+			return []service_codegen.ServiceLevelHistoricalConsumptions{
+				{
+					Subscription: service_codegen.SubscriptionBase{
+						Number: "sub-001",
+					},
+					ServiceLevels: []service_codegen.ServiceLevelHistoricalConsumption{
+						{Name: "premium"},
+					},
+				},
+			}, nil
+		},
+	}
+
+	service := subscriptionServices{
+		subscriptionFacadeService: subscriptionServiceFacade{
+			privateSubscriptionService: mockService,
+		},
+	}
+
+	fromDate := types.Date{Time: time.Now().AddDate(0, -1, 0)}
+	toDate := types.Date{Time: time.Now()}
+
+	t.Run("ValidCapacityUsage", func(t *testing.T) {
+		usages, err := service.GetServiceLevelCapacityUsagesBySubscription(context.Background(), []string{"sub-001"}, &fromDate, &toDate)
+		assert.NoError(t, err)
+		assert.Len(t, usages, 1)
+		assert.Equal(t, "sub-001", usages[0].Subscription.Number)
+	})
+
+	t.Run("InvalidCapacityUsage", func(t *testing.T) {
+		usages, err := service.GetServiceLevelCapacityUsagesBySubscription(context.Background(), []string{"invalid-sub"}, &fromDate, &toDate)
+		assert.Error(t, err)
+		assert.Nil(t, usages)
+	})
+}
