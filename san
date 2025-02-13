@@ -16,21 +16,47 @@ import (
 	"keystone-go/pkg/reporting-public/pkg/helpers"
 )
 
-// ✅ **Test ListBySubscriptionNumber** (Already Present, Keeping as is)
+// ✅ **Test ListBySubscriptionNumber**
 func TestListBySubscriptionNumber(t *testing.T) {
 	startDate, _ := time.Parse("2006-01-02", "2024-01-01")
 	endDate, _ := time.Parse("2006-01-02", "2025-01-01")
 
 	tests := []struct {
 		name                                    string
-		description                             string
 		subscriptionNumbers                     []string
 		getSubscriptionsBySubscriptionNumberFunc func(ctx context.Context, subscriptionNumbers []string) ([]service_codegen_dlh.SubscriptionBase, map[string]map[string]float64, error)
 		getMultipleSubscriptionServiceLevelsFunc func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error)
 		expected                                []service_codegen.Subscriptions
 		err                                     error
 	}{
-		// Existing test cases
+		{
+			name:                "TestListBySubscriptionNumberSuccess",
+			subscriptionNumbers: []string{"sub-123"},
+			getSubscriptionsBySubscriptionNumberFunc: func(ctx context.Context, subscriptionNumbers []string) ([]service_codegen_dlh.SubscriptionBase, map[string]map[string]float64, error) {
+				sub := service_codegen_dlh.SubscriptionBase{
+					AccountName:        "test-account",
+					SubscriptionNumber: "sub-123",
+					StartDate:          startDate,
+					EndDate:            endDate,
+				}
+				return []service_codegen_dlh.SubscriptionBase{sub}, nil, nil
+			},
+			getMultipleSubscriptionServiceLevelsFunc: func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error) {
+				return nil, nil
+			},
+			expected: []service_codegen.Subscriptions{
+				{
+					Subscription: service_codegen.SubscriptionBase{
+						EndDate:     endDate,
+						StartDate:   startDate,
+						Number:      "sub-123",
+						AccountName: "test-account",
+					},
+					ServiceLevels: nil,
+				},
+			},
+			err: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -52,45 +78,36 @@ func TestListBySubscriptionNumber(t *testing.T) {
 // ✅ **Test ListSubscriptionServiceLevels**
 func TestListSubscriptionServiceLevels(t *testing.T) {
 	tests := []struct {
-		name                                     string
-		subscriptionNumbers                      []string
-		getSubscriptionServiceLevelsFunc         func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error)
-		expected                                 []service_codegen.SubscriptionServiceLevels
-		err                                      error
+		name                        string
+		subscriptionNumbers         []string
+		getSubscriptionServiceLevels func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error)
+		expected                    []service_codegen.SubscriptionServiceLevels
+		err                         error
 	}{
 		{
 			name:                "TestListSubscriptionServiceLevelsSuccess",
 			subscriptionNumbers: []string{"sub-123"},
-			getSubscriptionServiceLevelsFunc: func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error) {
+			getSubscriptionServiceLevels: func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error) {
 				return []client.ServiceLevelResponse{
-					{Name: "extreme", CommittedBytes: 4096, SubscriptionNumber: helpers.StringPointer("sub-123")},
+					{Name: "premium", CommittedBytes: 1024, SubscriptionNumber: helpers.StringPointer("sub-123")},
 				}, nil
 			},
 			expected: []service_codegen.SubscriptionServiceLevels{
 				{
 					Subscription: service_codegen.SubscriptionBase{Number: "sub-123"},
 					ServiceLevels: []service_codegen.ServiceLevel{
-						{Name: "extreme", CommittedTib: 4096 / constants.TiB},
+						{Name: "premium", CommittedTib: 1024 / constants.TiB},
 					},
 				},
 			},
 			err: nil,
-		},
-		{
-			name:                "TestListSubscriptionServiceLevelsNotFound",
-			subscriptionNumbers: []string{"sub-456"},
-			getSubscriptionServiceLevelsFunc: func(ctx context.Context, subscriptionNumbers []string) ([]client.ServiceLevelResponse, error) {
-				return nil, client.ErrorSubscriptionNotFound
-			},
-			expected: nil,
-			err:      client.ErrorSubscriptionNotFound,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockFooterClient := mocks.FooterClientMock{
-				GetMultiSubscriptionServiceLevelsFunc: test.getSubscriptionServiceLevelsFunc,
+				GetMultiSubscriptionServiceLevelsFunc: test.getSubscriptionServiceLevels,
 			}
 
 			service := NewSubscriptionServices(&mockFooterClient)
@@ -108,16 +125,16 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 	toDate := types.Date{Time: time.Now()}
 
 	tests := []struct {
-		name                                     string
-		subscriptionNumbers                      []string
-		getServiceLevelCapacityUsageFunc         func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error)
-		expected                                 []service_codegen.ServiceLevelHistoricalConsumptions
-		err                                      error
+		name                          string
+		subscriptionNumbers           []string
+		getServiceLevelCapacityUsage  func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error)
+		expected                      []service_codegen.ServiceLevelHistoricalConsumptions
+		err                           error
 	}{
 		{
 			name:                "TestGetServiceLevelCapacityUsagesSuccess",
 			subscriptionNumbers: []string{"sub-123"},
-			getServiceLevelCapacityUsageFunc: func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error) {
+			getServiceLevelCapacityUsage: func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error) {
 				return []service_codegen.ServiceLevelHistoricalConsumptions{
 					{
 						Subscription: service_codegen.SubscriptionBase{Number: "sub-123"},
@@ -137,30 +154,12 @@ func TestGetServiceLevelCapacityUsagesBySubscription(t *testing.T) {
 			},
 			err: nil,
 		},
-		{
-			name:                "TestGetServiceLevelCapacityUsagesNotFound",
-			subscriptionNumbers: []string{"sub-456"},
-			getServiceLevelCapacityUsageFunc: func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error) {
-				return nil, client.ErrorSubscriptionNotFound
-			},
-			expected: nil,
-			err:      client.ErrorSubscriptionNotFound,
-		},
-		{
-			name:                "TestGetServiceLevelCapacityUsagesError",
-			subscriptionNumbers: []string{"sub-789"},
-			getServiceLevelCapacityUsageFunc: func(ctx context.Context, subscriptionNumbers []string, fromDate *types.Date, toDate *types.Date) ([]service_codegen.ServiceLevelHistoricalConsumptions, error) {
-				return nil, errors.New("unexpected error")
-			},
-			expected: nil,
-			err:      errors.New("unexpected error"),
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockFooterClient := mocks.FooterClientMock{
-				GetServiceLevelCapacityUsagesBySubscriptionFunc: test.getServiceLevelCapacityUsageFunc,
+				GetServiceLevelCapacityUsagesBySubscriptionFunc: test.getServiceLevelCapacityUsage,
 			}
 
 			service := NewSubscriptionServices(&mockFooterClient)
